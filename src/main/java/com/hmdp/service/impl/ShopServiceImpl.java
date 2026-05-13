@@ -93,7 +93,6 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //4.实现缓存重建
         //4.1获取互斥锁
         String lockKey = LOCK_SHOP_KEY + id;
-        Shop shop = null;
         try {
             boolean isLock = tryLock(lockKey);
             if (!isLock){
@@ -106,12 +105,12 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             //判断缓存是否存在
             if(StrUtil.isNotBlank(shopJson)){
                 //3.存在，返回商铺信息
-                Shop shop2 = JSONUtil.toBean(shopJson, Shop.class);
-                return shop2;
+                Shop shop = JSONUtil.toBean(shopJson, Shop.class);
+                return shop;
             }
 
             //4.4如果成功，根据id查询数据库
-            shop = getById(id);
+            Shop shop = getById(id);
             if (shop == null) {
                 //(1).不存在，将null值写入redis，返回错误信息
                 stringRedisTemplate.opsForValue().set(key,"",CACHE_NULL_TTL, TimeUnit.MINUTES);
@@ -120,15 +119,14 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             //(2).存在，写入redis，返回商铺信息
             stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL, TimeUnit.MINUTES);
 
+            //6.返回
+            return shop;
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         } finally {
             //5.释放互斥锁
             unLock(lockKey);
         }
-
-        //6.返回
-        return shop;
     }*/
 
 
@@ -262,7 +260,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //4.不存在，根据id查询数据库
         Shop shop = getById(id);
         if (shop == null) {
-            //(1).不存在，将null值写入redis，返回错误信息
+            //(1).不存在，将null值写入redis
             stringRedisTemplate.opsForValue().set(key,"",CACHE_NULL_TTL, TimeUnit.MINUTES);
             return null;
         }
@@ -270,8 +268,7 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         stringRedisTemplate.opsForValue().set(key,JSONUtil.toJsonStr(shop),CACHE_SHOP_TTL, TimeUnit.MINUTES);
 
         return shop;
-    }
-     */
+    }*/
 
 
 
