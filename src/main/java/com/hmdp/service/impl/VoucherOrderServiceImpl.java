@@ -8,8 +8,12 @@ import com.hmdp.service.ISeckillVoucherService;
 import com.hmdp.service.IVoucherOrderService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
+import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +37,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Resource
     private RedisIdWorker redisIdWorker;
 
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private RedissonClient redissonClient;
+
     public Result seckillVoucher(Long voucherId) {
         //1.查询优惠卷信息
         SeckillVoucher voucher = seckillVoucherService.getById(voucherId); //这里的getById来源
@@ -53,11 +63,29 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
 
         Long userId = UserHolder.getUser().getId();
-        synchronized (userId.toString().intern()) {
+
+        //创建锁对象
+        //SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        //获取锁
+        RLock lock = redissonClient.getLock("order:" + userId);
+
+        boolean isLock = lock.tryLock();
+        //判断是否获取锁成功
+        if(!isLock){
+            //不成功.
+            return Result.fail("不允许重复下单！");
+        }
+        try {
             //这里事务会失效，需要解决
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();//IVoucherOrderService的代理对象
             return proxy.createVoucherOrder(voucherId);
+        } catch (IllegalStateException e) {
+            throw new RuntimeException(e);
+        } finally {
+            //释放锁
+            lock.unlock();
         }
+
     }
 
     @Transactional
